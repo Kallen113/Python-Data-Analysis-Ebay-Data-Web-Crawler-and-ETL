@@ -106,6 +106,10 @@ def main():
 
     matched_listings_count = []
 
+    auction_bids_count = []
+
+    shipping_price= []
+
 
 
     # scrape item names:
@@ -178,6 +182,19 @@ def main():
 
     matched_listings_count = [el.split()[0] for el in matched_listings_count] # grab only the 0th substring, since this contains the results counts
 
+    # scrape number of bids (NB: this would clearly be zero if a listing was sold via a Buy it Now option instead)
+    bids_count = web_driver.find_elements(By.XPATH, "//span[@class='s-item__bids s-item__bidCount']")
+
+    for el in bids_count:
+        auction_bids_count.append(el.text)
+
+
+    # scrape shipping price
+    shipping_price_scraped = web_driver.find_elements(By.XPATH, "//span[@class='s-item__shipping s-item__logisticsCost']")
+
+
+    for el in shipping_price_scraped:
+        shipping_price.append(el.text)
 
     # sanity check
     # print(f"Item names:\n{item_names}")
@@ -191,17 +208,18 @@ def main():
     print(f"len of date when Item was sold:\n{len(date_sold)}")
 
     print(f"matched_listings_count:\n{matched_listings_count}")
-
     # # data pipeline: transform the lists to a DataFrame. 
     # Transform the lists to a dictionary of lists, and then use .T to transpose the data so that we can include lists of varying length
 
     df = pd.DataFrame.from_dict(
-        {'prices':item_prices,
+        {'price':item_prices,
         'item_names': item_names, 
         'condition': condition,
         'date_sold':date_sold,
         'seller_name':seller_name,
-        'matched_listings_count':matched_listings_count
+        'matched_listings_count':matched_listings_count,
+        'auction_bids_count':auction_bids_count,
+        'shipping_price':shipping_price
         },
         orient='index').T
 
@@ -213,22 +231,35 @@ def main():
     # forward fill values of matched_listings_count so we do not delete it when removing null values for columns such as item_prices
     df['matched_listings_count'] = df['matched_listings_count'].ffill(axis=0)
 
-    # remove dollar signs
-    df['prices'] = df['prices'].str.replace('$', '')
+
+    # clean prices data: remove "$" signs and any commas  
+    # # specify pattern of substrings we want to delete from the prices data, and join to pipe symbol (ie, OR Boolean in the Pandas library)
+    # substr_pattern_replace_prices =  '|'.join([',', '$'])
+
+    # df['price'] = df['price'].str.replace(substr_pattern_replace_prices, '')
+
+    # specify pattern of substrings we want to delete from the prices data, and join to pipe symbol (ie, OR Boolean in the Pandas library)
+    substr_pattern_replace_prices =  '|'.join([',', '$'])
+
+    df['price'] = df['price'].str.replace('$', '')
+    df['price'] = df['price'].str.replace(',', '')
 
 
     # extract only the first shown price, since some listings may have a range of price values (mapping the same product to multiple prices would overly complicate our data cleaning, data pipelines, and subsequent data analysis)
-    df['prices'] = df['prices'].str.split().str.get(0)  # extract only the first price
+    df['price'] = df['price'].str.split().str.get(0)  # extract only the first price
 
 
     # transform prices to numeric, and specify downcast as float to use smallest needed float data type
-    df['prices'] = pd.to_numeric(df['prices'], downcast='float')
+    # df['price'] = pd.to_numeric(df['price'], downcast='float')
+
+    df['price'] = pd.to_numeric(df['price'], downcast='float')
+
 
     # remove any null prices or item condition rows
-    df = df.dropna(subset=['prices', 'condition'])
+    df = df.dropna(subset=['price', 'condition'])
 
     # sanity check
-    print(f"Cleaned item prices:{df['prices']}")
+    print(f"Cleaned item prices:{df['price']}")
 
 
     # clean seller name data: the scraped data actually includes 3 substring elements related to sellers: a) the seller username; b) number of seller's ratings, & c) % of positive feedback for seller
@@ -265,16 +296,46 @@ def main():
     # specify pattern of substrings we want to delete, and join to pipe symbol (ie, OR Boolean in the Pandas library)
     substr_pattern_replace_matched_count =  '|'.join([',', '\+'])
 
-
-
     df['matched_listings_count'] = df['matched_listings_count'].str.replace(substr_pattern_replace_matched_count, '')
 
-    # transform prices to numeric, and specify downcast as float to use smallest needed float data type
+    # transform matched listings count to numeric, and specify downcast as float to use smallest needed float data type
     df['matched_listings_count'] = pd.to_numeric(df['matched_listings_count'])
+
+
+    ## clean shipping_price data:
+
+    # Specify records with "Free shipping" substr so we can consistently convert the column to numeric 
+    df['shipping_price'] = df['shipping_price'].str.replace("Free shipping", "0")
+
+    # remove plus sign, dollar sign, and "shipping" substrings from col, again so we can convert it to numeric
+    # substr_pattern_replace_shipping_price =  '|'.join(['\+', '$', 'shipping']) # specify the list of all 3 substrings we want to delete from col, and use '|' OR boolean operator
+
+    # df['shipping_price'] = df['shipping_price'].str.replace(substr_pattern_replace_shipping_price, '')
+
+    # remove plus sign
+    df['shipping_price'] = df['shipping_price'].str.replace('\+', '')
+
+    # remove dollar sign
+    df['shipping_price'] = df['shipping_price'].str.replace('$', '')
+
+    # remove 'shipping' substr
+    df['shipping_price'] = df['shipping_price'].str.replace('shipping', '')
+
+    # remove 'estimate' substr
+    df['shipping_price'] = df['shipping_price'].str.replace('estimate', '')
+
+    # transform shipping_price col to numeric
+    df['shipping_price'] = pd.to_numeric(df['shipping_price'], downcast='float')
+
+    # compute total price by adding the base price with the shipping price, as new col
+    df['total_price'] = df['price'] + df['shipping_price']
+
+    # remove any shipping_price nulls
+    df = df.dropna(subset=['shipping_price'])
+
 
     # sanity check
     print(f"Listing date sold data:{df['date_sold']}")
-
     # ETL data pipeline df to CSV:
     # import datetime module from date library so we can use today's date for outputted CSV file
     from datetime import date
