@@ -333,6 +333,17 @@ def main():
     # remove any shipping_price nulls
     df = df.dropna(subset=['shipping_price'])
 
+    # assign 'Auction' classification to all non-null bids counts records: create a buy_it_now_or_auction column, else (ie, bids counts is null) assign as "Buy_it_now"
+
+    df['buy_it_now_or_auction']= np.where(df['auction_bids_count'].notna(), 'Auction', "Buy_it_now")
+
+    # sanity check 
+    print(f"Buy it now vs auction listings classifications:\n{df['buy_it_now_or_auction']}")
+
+
+    # sanity check
+    print(f"Listing date sold data:{df['date_sold']}")
+
 
     # sanity check
     print(f"Listing date sold data:{df['date_sold']}")
