@@ -13,3 +13,6 @@ To-dos:
 3) The product names are not being scraped properly (no errors are shown when running the script, but no data are beng scraped either), even though the Xpath argument seems to be correct. Try a different approach to help identify and scrape the correct data.
 
 4) Expand the project by doing a more detailed data analysis of some of the scraped data.
+
+5) Add number of bids as an additional scraped column/variable. 
+   
