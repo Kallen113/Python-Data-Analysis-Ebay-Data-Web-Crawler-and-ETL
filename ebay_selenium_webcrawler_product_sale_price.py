@@ -137,6 +137,10 @@ def scrape_data(web_driver, item_names, item_prices, condition, date_sold, selle
     # parse item name
     parse_html_via_xpath(web_driver, "//div[@class='s-item__title--tag']", date_sold)
 
+
+    # # parse bid count
+    # parse_html_via_xpath(web_driver, "//span[@class='s-item__bids s-item__bidCount']", bids_count)
+
     # # scrape seller name (ie, user eBay user name of given seller)
     
     parse_html_via_xpath(web_driver, "//span[@class='s-item__seller-info-text']", seller_name)
@@ -153,7 +157,11 @@ def scrape_data(web_driver, item_names, item_prices, condition, date_sold, selle
 
     matched_listings_count = [el.split()[0] for el in matched_listings_count] # grab only the 0th substring, since this contains the results counts
 
+    # # scrape number of bids (NB: this would clearly be zero if a listing was sold via a Buy it Now option instead)
+    # bids_count = listings_data_ul_element.find_elements(By.XPATH, "//span[@class='s-item__bids s-item__bidCount']")
 
+    # for el in bids_count:
+    #     bids_count.append(el.text)
 
 
     # # scrape shipping price
@@ -166,8 +174,10 @@ def scrape_data(web_driver, item_names, item_prices, condition, date_sold, selle
     parse_html_via_xpath(web_driver, "//span[@class='s-item__shipping s-item__logisticsCost']", shipping_price)
 
     ## parse price type--ie, auction, buy it now, etc.
+    # NB: auction is not explicitly denoted on eBay listings, instead we need to use a boolean "or" condition in which we check for number of bids (if any)
+    # if the listing had 1 or more bids, then we can later use the number of bids for the bids_count list, and clean the price_type list such that we can specify replace the number of bids with "auction" for any such listing with bids!
 
-    parse_html_via_xpath(web_driver, "//span[@class='s-item__purchase-options s-item__purchaseOptions']",price_type)
+    parse_html_via_xpath(web_driver, "//span[@class='s-item__purchase-options s-item__purchaseOptions' or @class='s-item__bids s-item__bidCount']",price_type)
 
     # parse_html_via_xpath(web_driver, "//div[@class='s-item__detail s-item__detail--primary']",price_type)
  
@@ -266,6 +276,7 @@ def main():
 
     matched_listings_count = []
 
+    # bids_count = []
 
     shipping_price= []
 
@@ -346,6 +357,7 @@ def main():
         matched_listings_count = keep_first_n_matched_listings_count_if_only_single_page(matched_listings_count, matched_listings_count_int_el)
         shipping_price = keep_first_n_matched_listings_count_if_only_single_page(shipping_price, matched_listings_count_int_el)
         matched_listings_count = keep_first_n_matched_listings_count_if_only_single_page(matched_listings_count, matched_listings_count_int_el)
+        # bids_count = keep_first_n_matched_listings_count_if_only_single_page(bids_count, matched_listings_count_int_el)
 
     # clean price_type by replacing substrings with more straight-forward labels
     price_type = [el.replace('or Best Offer', 'Buy it now') for el in price_type]
@@ -367,7 +379,26 @@ def main():
     # clean item price_type data by removing extraneous empty string (ie, scraped from top of webpage before any real listings start)
     price_type = [el for el in price_type if el]
 
+    # parse number of bids data--NB: treat any non-bid listings as numpy nan values 
+    # make a copy of price_type so we can parse the data without affecting the elements of the original price_type list
+    bids_count  = list(price_type)
 
+    for index, element in enumerate(bids_count[:]):
+        if "bid" in element:
+            
+            bids_count[index] = element
+        else:
+            bids_count[index] = np.nan
+
+    # clean price_type by classifying listings with bids as being an Auction
+    for index, element in enumerate(price_type[:]):
+        if "bid" in element:
+            price_type[index] = 'Auction'
+        else:
+            price_type[index] = element
+
+    # sanity check
+    print(f"sanity check on price type (before cleaning bid count):\n {price_type}")
 
     # # data pipeline--transform the lists (columns) to a DataFrame. 
     # Transform the lists to a dictionary of lists, and then use .T to transpose the data so that we can include lists of varying length
@@ -379,6 +410,7 @@ def main():
         'date_sold':date_sold,
         'seller_name':seller_name,
         'matched_listings_count':matched_listings_count,
+        'bids_count':bids_count,
         'shipping_price':shipping_price,
         'price_type':price_type
         },
@@ -474,6 +506,11 @@ def main():
 
     # transform matched listings count to numeric, and specify downcast as float to use smallest needed float data type
     df['matched_listings_count'] = pd.to_numeric(df['matched_listings_count'])
+
+    # clean bids_count by removing any 'bids' or 'bid' substrings
+    substr_pattern_bid =  '|'.join(['bid', 'bids'])
+
+    df['bids_count'] = df['bids_count'].str.replace(substr_pattern_bid, "", regex=False)
 
 
     ## clean shipping_price data:
