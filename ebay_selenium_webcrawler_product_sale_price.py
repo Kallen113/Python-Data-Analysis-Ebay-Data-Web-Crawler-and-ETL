@@ -535,10 +535,21 @@ def main():
     # remove 'estimate' substr
     df['shipping_price'] = df['shipping_price'].str.replace('estimate', '')
 
+    # account for possibility of certain shipping prices to be unkown based on listing not having specified a shipping price
+    df['shipping_price'] = df['shipping_price'].str.replace('Shipping not specified', '')  # delete aby unspecified shipping prices since we cannot verify shipping price in these instances
+
+    # sanity check
+    print(f"Initial cleaning of shipping prices (still str):{df['shipping_price']}")
+
+    # remove any columns with missing shipping price data (ie, literally empty strings '' given shipping_price is still an object column)
+    df = df[df['shipping_price']!='']
+
     # transform shipping_price col to numeric
     df['shipping_price']  = pd.to_numeric(df.shipping_price, 'coerce').round(2).fillna(df.shipping_price)
 
-
+    # sanity check
+    print(f"Final data cleaning and transformation of shipping prices to numeric:{df['shipping_price']}")
+    
     # compute total price by adding the base price with the shipping price, as new col
     df['total_price'] = df['price'] + df['shipping_price']
 
@@ -547,7 +558,6 @@ def main():
 
     # sanity check
     print(f"Listing date sold data:{df['date_sold']}")
-
 
     # to ensure we are only looking at listings that definitely contain the search keyword, filter the data to only the matching keyword matches if the number of keyword matches is less than 60 (ie, less than the 1st full page of listings):
     if df['matched_listings_count'].iloc[0] < 60:  # ie, check if the number of listings matching the search keyword(s) is less than 60
