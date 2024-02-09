@@ -556,8 +556,6 @@ def main():
     # remove any shipping_price nulls
     df = df.dropna(subset=['shipping_price'])
 
-    # sanity check
-    print(f"Listing date sold data:{df['date_sold']}")
 
     # to ensure we are only looking at listings that definitely contain the search keyword, filter the data to only the matching keyword matches if the number of keyword matches is less than 60 (ie, less than the 1st full page of listings):
     if df['matched_listings_count'].iloc[0] < 60:  # ie, check if the number of listings matching the search keyword(s) is less than 60
